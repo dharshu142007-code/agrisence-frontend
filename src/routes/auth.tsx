@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { GlassCard } from "@/components/glass-card";
 import { ParticleField } from "@/components/particle-field";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 const searchSchema = z.object({
   redirect: z.string().optional(),
@@ -33,6 +32,10 @@ export const Route = createFileRoute("/auth")({
 
 type Mode = "signin" | "signup" | "forgot";
 
+function friendly(message: string) {
+  return message.replace(/_/g, " ").trim() || "Something went wrong. Please try again.";
+}
+
 export function AuthPage() {
   const search = useSearch({ from: "/auth" });
   const nav = useNavigate();
@@ -48,7 +51,7 @@ export function AuthPage() {
 
   const go = () => nav({ to: search.redirect ?? "/dashboard", replace: true });
 
-  const resolvedCallbackUrl = callbackUrl ?? (typeof window !== "undefined" ? `${window.location.origin}/auth/google/callback` : undefined);
+  const resolvedRedirectUrl = callbackUrl ?? (typeof window !== "undefined" ? `${window.location.origin}/auth/google/callback` : undefined);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -151,15 +154,29 @@ export function AuthPage() {
 
   async function google() {
     setLoading(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: resolvedCallbackUrl,
-    });
-    if (result.error) {
+
+    if (!resolvedRedirectUrl) {
       setLoading(false);
-      return toast.error(result.error.message);
+      return toast.error("Google callback URL is not configured.");
     }
-    if (result.redirected) return; // browser is navigating to Google
-    // Session is set — make sure cached session state refreshes, then continue.
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: resolvedRedirectUrl,
+      },
+    });
+
+    if (error) {
+      setLoading(false);
+      return toast.error(friendly(error.message));
+    }
+
+    if (data?.url) {
+      window.location.assign(data.url);
+      return;
+    }
+
     await qc.invalidateQueries({ queryKey: ["session"] });
     setLoading(false);
     toast.success("Welcome back!");
