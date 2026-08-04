@@ -48,26 +48,27 @@ export function AuthPage() {
   const [farmName, setFarmName] = useState("");
 
   const callbackUrl = import.meta.env.VITE_GOOGLE_CALLBACK_URL;
-
   const go = () => nav({ to: search.redirect ?? "/dashboard", replace: true });
-
-  const resolvedRedirectUrl = callbackUrl ?? (typeof window !== "undefined" ? `${window.location.origin}/auth/google/callback` : undefined);
+  const resolvedRedirectUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/auth/google/callback`
+    : callbackUrl;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has("access_token") && !params.has("refresh_token") && window.location.hash.startsWith("#")) {
+    if (window.location.hash.startsWith("#")) {
       const hashParams = new URLSearchParams(window.location.hash.slice(1));
-      for (const [key, value] of hashParams.entries()) {
+      hashParams.forEach((value, key) => {
         if (!params.has(key)) params.set(key, value);
-      }
+      });
     }
 
     const access_token = params.get("access_token");
     const refresh_token = params.get("refresh_token");
+    const code = params.get("code");
     const error = params.get("error");
     const errorDescription = params.get("error_description") ?? params.get("error_description");
 
-    if (!access_token && !refresh_token && !error) return;
+    if (!access_token && !refresh_token && !code && !error) return;
 
     async function handleOAuthCallback() {
       setLoading(true);
@@ -79,17 +80,20 @@ export function AuthPage() {
         return;
       }
 
-      if (!access_token || !refresh_token) {
-        toast.error("Google sign-in did not return a valid session.");
-        setLoading(false);
-        nav({ to: "/auth", replace: true });
-        return;
+      let sessionError: Error | null = null;
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        sessionError = exchangeError ?? null;
       }
 
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token,
-        refresh_token,
-      });
+      if (!sessionError && access_token && refresh_token) {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        sessionError = setSessionError ?? null;
+      }
 
       if (sessionError) {
         toast.error(friendly(sessionError.message));
@@ -98,13 +102,17 @@ export function AuthPage() {
         return;
       }
 
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+
       await qc.invalidateQueries({ queryKey: ["session"] });
       setLoading(false);
       toast.success("Signed in successfully!");
       go();
     }
 
-    handleOAuthCallback();
+    void handleOAuthCallback();
   }, [go, nav, qc]);
 
   async function signIn() {
@@ -164,6 +172,10 @@ export function AuthPage() {
       provider: "google",
       options: {
         redirectTo: resolvedRedirectUrl,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
       },
     });
 
