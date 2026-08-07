@@ -163,7 +163,16 @@ export function AuthPage() {
   async function google() {
     setLoading(true);
 
-    if (!resolvedRedirectUrl) {
+    // Prefer explicit env-configured callback URL when available (useful for Vercel envs).
+    const explicitCallback = (import.meta.env.VITE_GOOGLE_CALLBACK_URL as string | undefined) || undefined;
+    const redirectTo = explicitCallback ?? resolvedRedirectUrl;
+
+    // Log the redirect target for debugging (will appear in browser console).
+    // Do NOT include secrets here.
+    // eslint-disable-next-line no-console
+    console.log("Google OAuth redirectTo:", redirectTo);
+
+    if (!redirectTo) {
       setLoading(false);
       return toast.error("Google callback URL is not configured.");
     }
@@ -171,7 +180,7 @@ export function AuthPage() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: resolvedRedirectUrl,
+        redirectTo,
         queryParams: {
           access_type: "offline",
           prompt: "consent",
@@ -185,6 +194,9 @@ export function AuthPage() {
     }
 
     if (data?.url) {
+      // Log the provider URL (safe) before navigating to help debug redirects.
+      // eslint-disable-next-line no-console
+      console.log("Supabase OAuth URL:", data.url);
       window.location.assign(data.url);
       return;
     }
