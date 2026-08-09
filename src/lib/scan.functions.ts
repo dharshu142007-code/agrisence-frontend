@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start"
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText, Output, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
@@ -38,13 +38,13 @@ export const analyzeCropImage = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
 
     // Get a temporary signed URL so the model can fetch the private image
-    const { data: signed, error: signedErr } = await supabase.storage
-      .from("scans")
-      .createSignedUrl(data.imagePath, 60 * 10);
-    if (signedErr || !signed?.signedUrl) {
-      throw new Error("Could not read uploaded image");
-    }
+  const { data: publicUrlData } = supabase.storage
+  .from("scans")
+  .getPublicUrl(data.imagePath);
 
+if (!publicUrlData?.publicUrl) {
+  throw new Error("Could not read uploaded image");
+}
     const gateway = createLovableAI({ structuredOutputs: true });
     const model = gateway("openai/gpt-5.5");
 
@@ -63,7 +63,7 @@ export const analyzeCropImage = createServerFn({ method: "POST" })
                 type: "text",
                 text: "Diagnose this plantation photo (it may show a tree, stem, branch, root, leaf, flower, fruit or vegetable plant) and provide a full treatment plan.",
               },
-              { type: "image", image: new URL(signed.signedUrl) },
+              { type: "image", image: new URL(publicUrlData.publicUrl) },
             ],
           },
         ],

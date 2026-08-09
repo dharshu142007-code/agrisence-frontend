@@ -180,7 +180,7 @@ function Scan() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-2xl font-bold">Diagnosis & plant details</h2>
             <Button asChild variant="outline" size="sm" className="rounded-2xl">
-              <Link to={`/scan/${result.id}`}>Open full report</Link>
+              <Link to="/scan">Open full report</Link>
             </Button>
           </div>
           <ScanResultView scan={result} imageUrl={preview} />
